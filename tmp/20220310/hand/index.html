@@ -12,7 +12,7 @@
 <body>
   <div class="container">
     <video class="input_video"></video>
-    <canvas class="output_canvas" width="720px" height="1280px"></canvas>
+    <canvas class="output_canvas" width="1280" height="720"></canvas>
     <div id="cnt"></div>
   </div>
 </body>
@@ -24,11 +24,6 @@
 const videoElement = document.getElementsByClassName('input_video')[0];    // カメラの入力
 const canvasElement = document.getElementsByClassName('output_canvas')[0]; // キャンバス
 const canvasCtx = canvasElement.getContext('2d');
-
-
-// navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:720,height:1280,frameRate:{ideal:10}}});
-navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:720,height:1280,frameRate:{ideal:10}}});
-
 
 // 手の表示秒数からカウント
 var s_time = null;
@@ -82,8 +77,8 @@ const camera = new Camera(videoElement, {
   onFrame: async () => {
     await hands.send({image: videoElement});
   },
-  width: 720,
-  height: 1280,
+  width: 1280,
+  height: 720
 });
 
 camera.start();
