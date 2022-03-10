@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" type="text/css" href="demo.css">
+</head>
+
+<body>
+  <div class="container">
+    <video class="input_video"></video>
+    <canvas class="output_canvas" width="1280" height="720"></canvas>
+    <div id="cnt"></div>
+  </div>
+</body>
+
+<script type="module">
+//const devices = (await navigator.mediaDevices.enumerateDevices());
+//console.log(devices);
+
+const videoElement = document.getElementsByClassName('input_video')[0];    // カメラの入力
+const canvasElement = document.getElementsByClassName('output_canvas')[0]; // キャンバス
+const canvasCtx = canvasElement.getContext('2d');
+
+// 手の表示秒数からカウント
+var s_time = null;
+var e_time = null;
+var cnt = 0;
+s_time = new Date();
+e_time = new Date();
+
+function onResults(results) {
+  canvasCtx.save();
+  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+  // 検出したときの処理
+  if (results.multiHandLandmarks) {
+    for (const landmarks of results.multiHandLandmarks) {
+      drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+      drawLandmarks(canvasCtx, landmarks, {color: '#00008B', lineWidth: 2});
+
+      // 手の表示秒数からカウント
+      e_time = new Date();
+      var diff = e_time.getTime() - s_time.getTime();
+
+      // X秒以上差がついたらカウント
+      if (diff > 1000) {
+          cnt = cnt+1;
+          // console.log("経過時間(ミリ秒):", diff);
+          console.log(cnt + "回");
+          document.getElementById('cnt').innerHTML = cnt + "回";
+      }
+      s_time = new Date();
+    }
+  }
+  canvasCtx.restore();
+}
+
+const hands = new Hands({locateFile: (file) => {
+  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+}});
+
+hands.setOptions({
+  maxNumHands: 2,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+hands.onResults(onResults);
+
+const camera = new Camera(videoElement, {
+  onFrame: async () => {
+    await hands.send({image: videoElement});
+  },
+  width: 1280,
+  height: 720
+});
+
+camera.start();
+</script>
+</html>
