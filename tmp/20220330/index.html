@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+
+<meta charset="UTF-8">
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>demo</title>
+
+<script src="assets/camera_utils/camera_utils.js"></script>
+<script src="assets/control_utils/control_utils.js"></script>
+<script src="assets/drawing_utils/drawing_utils.js"></script>
+<script src="assets/hands/hands.js"></script>
+
+<style type="text/css">
+<!--
+@charset "UTF-8";
+*{
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+.input_video {
+  display:none;
+}
+.output_canvas {
+  display: block;
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+}
+.row {
+  float: left;
+  width: 100%;
+  padding-left: 20px;
+  font-size: 60px;
+}
+#wrapper{
+  width: 100%;
+}
+#cnt {
+  font-size: 200px;
+}
+input[type=radio] {
+  display: none;
+}
+.label {
+  font-size: 30px;
+  display: block;
+  float: left;
+  margin: 5px;
+  width: 100px;
+  height: 45px;
+  padding-left: 5px;
+  padding-right: 5px;
+  text-align: center;
+  line-height: 45px;
+  cursor: pointer;
+  border: 2px solid #006DD9;
+  border-radius: 5px;
+}
+#setconf, #setsec {
+  color:blue;
+}
+-->
+</style>
+
+</head>
+
+
+<body>
+
+<video class="input_video"></video>
+
+<div id="wrapper">
+    <canvas class="output_canvas" width="1080" height="1080"></canvas>
+</div>
+
+<div class="row">
+    <span class="fs01">確信度X以上（低:1～高:9）</span>：<span id="setconf">5</span><br>
+    <input type="radio" name="q01" value="1" id="11"><label for="11" class="label">1</label>
+    <input type="radio" name="q01" value="2" id="12"><label for="12" class="label">2</label>
+    <input type="radio" name="q01" value="3" id="13"><label for="13" class="label">3</label>
+    <input type="radio" name="q01" value="4" id="14"><label for="14" class="label">4</label>
+    <input type="radio" name="q01" value="5" id="15"><label for="15" class="label">5</label>
+    <input type="radio" name="q01" value="6" id="16"><label for="16" class="label">6</label>
+    <input type="radio" name="q01" value="7" id="17"><label for="17" class="label">7</label>
+    <input type="radio" name="q01" value="8" id="18"><label for="18" class="label">8</label>
+    <input type="radio" name="q01" value="9" id="19"><label for="19" class="label">9</label>
+</div>
+
+<br>
+
+<div class="row">
+    <span class="fs01">検知時間X以上（秒）</span>：<span id="setsec">1</span><br>
+    <input type="radio" name="q02" value="1" id="21"><label for="21" class="label" checked>1</label>
+    <input type="radio" name="q02" value="2" id="22"><label for="22" class="label">2</label>
+    <input type="radio" name="q02" value="3" id="23"><label for="23" class="label">3</label>
+    <input type="radio" name="q02" value="4" id="24"><label for="24" class="label">4</label>
+    <input type="radio" name="q02" value="5" id="25"><label for="25" class="label">5</label>
+    <input type="radio" name="q02" value="6" id="26"><label for="26" class="label">6</label>
+    <input type="radio" name="q02" value="7" id="27"><label for="27" class="label">7</label>
+    <input type="radio" name="q02" value="8" id="28"><label for="28" class="label">8</label>
+    <input type="radio" name="q02" value="9" id="29"><label for="29" class="label">9</label>
+</div>
+
+<div class="row">
+    <div id="cnt"></div>
+</div>
+
+<div class="row">
+  <div id="msize"></div>
+</div>
+
+</body>
+
+
+
+
+
+<script type="module">
+
+const videoElement  = document.getElementsByClassName('input_video')[0];   // カメラの入力
+const canvasElement = document.getElementsByClassName('output_canvas')[0]; // キャンバス
+const canvasCtx     = canvasElement.getContext('2d');
+
+// 画面サイズデバッグ用
+//var w = $('#wrapper').width();
+//document.getElementById('msize').innerHTML = "Width:" + w;
+
+// 初期判定
+var initflg = 0;
+// 手の検出数
+var inithand = 5;
+// 確信度初期設定値
+var detectconf = 0.5;
+// 同一認識時間初期設定値（ミリ秒）
+var detectTime = 1000;
+
+// 手の表示秒数からカウント
+var s_time = null;
+var e_time = null;
+var cnt = 0;
+s_time = new Date();
+e_time = new Date();
+
+// 検出結果を描画
+function onResults(results) {
+  canvasCtx.save();
+  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+  // 検出したとき
+  if (results.multiHandLandmarks) {
+    for (const landmarks of results.multiHandLandmarks) {
+      drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+      drawLandmarks(canvasCtx, landmarks, {color: '#00008B', lineWidth: 3});
+
+      // 手の表示秒数からカウント
+      e_time = new Date();
+      var diff = e_time.getTime() - s_time.getTime();
+
+      // X秒以上差がついたらカウント
+      if (diff > detectTime) {
+          cnt = cnt+1;
+          // console.log("経過時間(ミリ秒):", diff);
+          console.log(cnt + "回");
+          document.getElementById('cnt').innerHTML = cnt + "回";
+      }
+      s_time = new Date();
+    }
+  }
+  canvasCtx.restore();
+}
+
+const hands = new Hands({locateFile: (file) => {
+  return `assets/hands/${file}`;
+}});
+
+
+if(initflg == 0){
+  // https://google.github.io/mediapipe/solutions/hands.html
+  hands.setOptions({
+    maxNumHands: inithand, // 検出する手の最大数
+    modelComplexity: 1, // 手のランドマークモデルの複雑さ
+    minDetectionConfidence: detectconf, // 検出が成功したと見なされるための、手の検出モデルからの最小信頼値
+    minTrackingConfidence: 0.5 // 手のランドマークが正常に追跡されたと見なされるためのランドマーク追跡モデルからの最小信頼値
+  });
+  hands.onResults(onResults);
+}
+
+const camera = new Camera(videoElement, {
+  onFrame: async () => {
+    await hands.send({image: videoElement});
+  },
+  facingMode:"environment", // カメラ背面
+  width: 1920,
+  height: 1920
+});
+
+camera.start();
+
+
+// 確信度が変更されたとき
+let radio_btn_q01 = document.querySelectorAll(`input[type='radio'][name='q01']`);
+for (let target01 of radio_btn_q01) {
+  target01.addEventListener(`change`, () => {
+    console.log(`${target01.value} : ${target01.checked}`);
+    camera.stop(); // カメラ停止
+    detectconf = `${target01.value}` * 0.1; // 確信度変換
+    console.log(`detectconf:` + detectconf.toFixed(1));
+    document.getElementById('setconf').innerHTML = `${target01.value}`;
+    cnt = 0; // カウント初期化
+    initflg = 1;
+
+    // 確信度の変更
+    hands.setOptions({
+      maxNumHands: inithand,
+      modelComplexity: 1,
+      minDetectionConfidence: detectconf, 
+      minTrackingConfidence: 0.5
+    });
+
+    hands.onResults(onResults);
+    camera.start(); // カメラ開始
+  });
+}
+
+// 秒数が変更されたとき
+let radio_btn_q02 = document.querySelectorAll(`input[type='radio'][name='q02']`);
+for (let target02 of radio_btn_q02) {
+  target02.addEventListener(`change`, () => {
+    console.log(`${target02.value} : ${target02.checked}`);
+    camera.stop(); // カメラ停止
+    detectTime = `${target02.value}` * 1000; // ミリ秒数変換
+    console.log(`detectTime:` + Math.round(detectTime));
+    document.getElementById('setsec').innerHTML = `${target02.value}`;
+    cnt = 0; // カウント初期化
+    initflg = 1;
+    camera.start(); // カメラ開始
+  });
+}
+</script>
+
+
+
+</html>
