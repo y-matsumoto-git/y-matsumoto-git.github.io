@@ -43,8 +43,8 @@ video {
 //let width = 960;
 //let height = 960;
 
-let width = 640;
-let height = 640;
+let width = 800;
+let height = 800;
 
 
 let streaming = false;
@@ -82,22 +82,22 @@ function startup() {
     video = document.getElementById("video");
 
     navigator.mediaDevices.getUserMedia({ 
-/*
+/**/
       // 背面カメラ
       video: {
           facingMode: "environment",
           width: { ideal: 3840 },
           height: { ideal: 2160 }
       },
-*/
 /**/
+/*
       // 前面カメラ
       video: {
           facingMode: "user",
           width: { ideal: 3840 },
           height: { ideal: 2160 }
       },
-/**/
+*/
       audio: false 
     })
         .then(function(s) {
