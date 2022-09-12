@@ -168,7 +168,8 @@ function playVideo() {
     let distCoeffs = cv.matFromArray(5, 1, cv.CV_64F, [-1.5007354215536557e-03, 9.8722389825801837e-01, 1.7188452542408809e-02, -2.6805958820424611e-02,-2.3313928379240205e+00]);
     let cap = new cv.VideoCapture("video");
 
-    let fps = 300;  // 解像度高いvideoを入力するときは、500とかにしたほうがいいかも
+    // let fps = 300;  // 解像度高いvideoを入力するときは、500とかにしたほうがいいかも
+    let fps = 33;  // リアルタイム
 
     loopIndex = setInterval(
 
@@ -182,6 +183,7 @@ function playVideo() {
             // ARUCOマーカーがあったら
             if (markerIds.rows > 0) {
                 cv.drawDetectedMarkers(RgbImage, markerCorners, markerIds);
+              /*
                 cv.estimatePoseSingleMarkers(markerCorners, 0.1, cameraMatrix, distCoeffs, rvecs, tvecs);
                 for(let i=0; i < markerIds.rows; ++i) {
                     let rvec = cv.matFromArray(3, 1, cv.CV_64F, [rvecs.doublePtr(0, i)[0], rvecs.doublePtr(0, i)[1], rvecs.doublePtr(0, i)[2]]);
@@ -190,6 +192,7 @@ function playVideo() {
                     rvec.delete();
                     tvec.delete();
                 }
+              */
             }
             cv.imshow("canvasOutput", RgbImage);
         }, fps);
