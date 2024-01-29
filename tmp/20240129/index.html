@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Geolocation with WebWorker</title>
+    <script src="main.js"></script>
+</head>
+<body>
+    <h1>Geolocation with WebWorker Example</h1>
+    <div id="location"></div>
+
+    <script>
+        // 位置情報の結果を表示するための関数
+        function displayLocation(data) {
+            document.getElementById('location').textContent = data;
+        }
+    </script>
+</body>
+</html>
