@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Webcam Demo with OpenCV.js</title>
+<style>
+body {
+  background-color: #F0F3F5;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+}
+h1 {
+  background-color: #00E600;
+  color: white;
+  padding: 10px 5%;
+  margin-top: 0;
+}
+.video-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  max-width: 640px;
+  margin-bottom: 20px;
+}
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.controller {
+  margin-bottom: 20px;
+}
+button {
+  padding: 10px;
+  margin-right: 10px;
+  cursor: pointer;
+  background-color: #00E600;
+  border: none;
+  color: white;
+  border-radius: 5px;
+}
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+#status, #error, #resolutionInfo, #imageAnalysis {
+  margin-bottom: 10px;
+}
+#status { color: #00E600; font-weight: bold; }
+#error { color: red; }
+#capturedImage {
+  max-width: 100%;
+  display: none;
+  margin-top: 20px;
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider {
+  background-color: #00E600;
+}
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+.switch-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.switch-label {
+  margin-left: 10px;
+}
+</style>
+</head>
+<body>
+    <h1>Webcam Demo with OpenCV.js</h1>
+
+    <div id="status">Waiting for OpenCV.js to load...</div>
+    <div id="error"></div>
+  
+    <div class="video-container">
+      <canvas id="webcamCanvas"></canvas>
+      <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  
+    <canvas id="capturedCanvas" style="display:none;"></canvas>
+    
+    <div class="controller">
+      <button id="startCamera">Start Camera</button>
+      <button id="stopCamera" disabled>Stop Camera</button>
+      <button id="capture" disabled>Capture Image</button>
+      <button id="toggleFacingMode" disabled>Toggle Camera</button>
+    </div>
+
+    <div class="switch-container">
+      <label class="switch">
+        <input type="checkbox" id="toggleContour">
+        <span class="slider"></span>
+      </label>
+      <span class="switch-label">Show Max Rectangle</span>
+    </div>
+  
+    <img id="capturedImage" alt="Captured Image">
+  
+    <div id="resolutionInfo">Resolution: Not determined yet</div>
+    <div id="imageAnalysis"></div>
+  
+  <script>
+    // Constants
+    const LANDSCAPE_RESOLUTION_LIST = [
+      { width: 7680, height: 4320 }, // 8K
+      { width: 3840, height: 2160 }, // 4K
+      { width: 2560, height: 1440 }, // WQHD
+      { width: 1920, height: 1080 }, // Full-HD
+      { width: 1280, height:  720 }, // HD
+    ];
+    const PORTRAIT_RESOLUTION_LIST = LANDSCAPE_RESOLUTION_LIST.map(res => ({
+      width: res.height,
+      height: res.width,
+    }));
+    const MAX_RETRIES = 3;
+    const FPS = 5;
+
+    // Global variables
+    let stream;
+    let facingMode = 'environment';
+    let frameInterval;
+    let retryCount = 0;
+    let cv;
+    let showContour = false; // 矩形表示のON/OFF
+
+    // DOM Elements
+    const canvasElement = document.getElementById('webcamCanvas');
+    const canvasContext = canvasElement.getContext('2d');
+    const capturedCanvasElement = document.getElementById('capturedCanvas');
+    const resolutionInfo = document.getElementById('resolutionInfo');
+    const svgOverlay = document.getElementById('overlay');
+    const statusElement = document.getElementById('status');
+    const errorElement = document.getElementById('error');
+    const startCameraButton = document.getElementById('startCamera');
+    const stopCameraButton = document.getElementById('stopCamera');
+    const captureButton = document.getElementById('capture');
+    const toggleFacingModeButton = document.getElementById('toggleFacingMode');
+    const videoElement = document.createElement('video');
+
+    function isPortrait() {
+      return window.innerHeight > window.innerWidth;
+    }
+
+    async function getConstraints(facingMode) {
+      const resolutionList = isPortrait() ? PORTRAIT_RESOLUTION_LIST : LANDSCAPE_RESOLUTION_LIST;
+
+      for (const resolution of resolutionList) {
+        const constraints = {
+          width: { ideal: resolution.width, min: 640 },
+          height: { ideal: resolution.height, min: 480 },
+          facingMode: { ideal: facingMode },
+        };
+        
+        if (await isResolutionAvailable(constraints)) {
+          return constraints;
+        } else {
+          console.log("Resolution not available:", resolution.width, resolution.height);
+        }
+      }
+      return { facingMode: { ideal: facingMode } };
+    }
+
+    async function isResolutionAvailable(constraints) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: constraints });
+        const videoTrack = stream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities();
+        console.log('Supported capabilities:', capabilities);
+
+        stream.getTracks().forEach(track => track.stop());
+        return true;
+      } catch (error) {
+        console.error('Error in getUserMedia:', error);
+        return false;
+      }
+    }
+
+    function onOpenCvReady() {
+      cv = window.cv;
+      console.log('OpenCV.js is ready');
+      statusElement.textContent = 'OpenCV.js loaded. Click "Start Camera" to begin.';
+      startCameraButton.disabled = false;
+    }
+
+    function detectBlur(src) {
+      const gray = new cv.Mat();
+      const laplacian = new cv.Mat();
+      const mean = new cv.Mat();
+      const stddev = new cv.Mat();
+      
+      try {
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.Laplacian(gray, laplacian, cv.CV_64F);
+        cv.meanStdDev(laplacian, mean, stddev);
+        const stdDevValue = stddev.data64F[0];
+        return stdDevValue < 5;
+      } catch (error) {
+        console.error('Error in detectBlur:', error);
+        return false;
+      } finally {
+        gray.delete();
+        laplacian.delete();
+        mean.delete();
+        stddev.delete();
+      }
+    }
+
+    function detectBrightness(src) {
+      const hsv = new cv.Mat();
+      const channels = new cv.MatVector();
+  
+      try {
+        cv.cvtColor(src, hsv, cv.COLOR_RGB2HSV);
+        cv.split(hsv, channels);
+        const v = channels.get(2);
+        const mean = cv.mean(v);
+        v.delete();
+        return mean[0] < 50 ? '×: 暗すぎる' : (mean[0] > 200 ? '×: 明るすぎる' : '〇: 明るさが適切');
+      } catch (error) {
+        console.error('Error in detectBrightness:', error);
+        return 'unknown';
+      } finally {
+        hsv.delete();
+        channels.delete();
+      }
+    }
+
+    function findContours(src) {
+      const gray = new cv.Mat();
+      const binary = new cv.Mat();
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+
+      try {
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.threshold(gray, binary, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+        cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+        return contours;
+      } finally {
+        gray.delete();
+        binary.delete();
+        hierarchy.delete();
+      }
+    }
+
+    function findLargestContour(contours) {
+      let maxArea = 0;
+      let largestContour = null;
+
+      for (let i = 0; i < contours.size(); ++i) {
+        const contour = contours.get(i);
+        const area = cv.contourArea(contour);
+        if (area > maxArea) {
+          maxArea = area;
+          largestContour = contour;
+        }
+      }
+
+      return largestContour;
+    }
+
+    function drawContours(src, largestContour) {
+      if (largestContour) {
+        const rect = cv.boundingRect(largestContour);
+        cv.rectangle(src, new cv.Point(rect.x, rect.y), new cv.Point(rect.x + rect.width, rect.y + rect.height), [255, 0, 0, 255], 4);
+      }
+    }
+
+
+
+
+    // Main functions
+    async function startWebcam() {
+      if (typeof cv === 'undefined') {
+        console.log('OpenCV.js is not loaded yet. Waiting...');
+        setTimeout(startWebcam, 500);
+        return;
+      }
+
+      try {
+        errorElement.textContent = '';
+        statusElement.textContent = "Starting camera...";
+        await stopStream();
+
+        const constraints = await getConstraints(facingMode);
+        stream = await navigator.mediaDevices.getUserMedia({ video: constraints });
+        videoElement.srcObject = stream;
+        await videoElement.play();
+
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        resolutionInfo.textContent = `Resolution: ${settings.width} x ${settings.height}`;
+
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+        svgOverlay.setAttribute('viewBox', `0 0 ${videoElement.videoWidth} ${videoElement.videoHeight}`);
+
+        drawSVGOverlay();
+        startFrameRendering();
+        statusElement.textContent = "Camera ready";
+        updateButtonStates(true);
+        retryCount = 0;
+      } catch (error) {
+        handleWebcamError(error);
+      }
+    }
+
+    function startFrameRendering() {
+      stopFrameRendering();
+      const frameTime = 1000 / FPS;
+
+      frameInterval = setInterval(() => {
+        canvasContext.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+
+        if (typeof cv !== 'undefined' && cv.Mat) {
+          try {
+            const src = cv.imread(canvasElement);
+            if (src.empty()) {
+              console.warn('Empty source image');
+              src.delete();
+              return;
+            }
+
+            const isBlurry = detectBlur(src);
+            const brightness = detectBrightness(src);
+            
+            document.getElementById('imageAnalysis').innerHTML = 
+              `Blur: ${isBlurry ? '×: ピンボケ' : '〇: 鮮明'}<br>Brightness: ${brightness}`;
+
+            if (showContour) {
+              const contours = findContours(src);
+              const largestContour = findLargestContour(contours);
+              drawContours(src, largestContour);
+              contours.delete();
+            }
+
+            cv.imshow('webcamCanvas', src);
+            src.delete();
+          } catch (error) {
+            console.error('Error in image processing:', error);
+          }
+        }
+      }, frameTime);
+    }
+
+    function stopFrameRendering() {
+      if (frameInterval) {
+        clearInterval(frameInterval);
+      }
+    }
+
+    function drawSVGOverlay() {
+      const borderMargin = 0.04;
+      const xOffset = canvasElement.width * borderMargin;
+      const yOffset = canvasElement.height * borderMargin * 0.5;
+      const width = canvasElement.width * (1 - 2 * borderMargin);
+      const height = canvasElement.height * (1 - 2 * borderMargin * 0.8);
+
+      svgOverlay.innerHTML = '';
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", xOffset);
+      rect.setAttribute("y", yOffset);
+      rect.setAttribute("width", width);
+      rect.setAttribute("height", height);
+      rect.setAttribute("stroke", "rgba(0, 255, 0, 0.5)");
+      rect.setAttribute("stroke-width", "18");
+      rect.setAttribute("fill", "none");
+      rect.setAttribute("rx", "20");
+      rect.setAttribute("ry", "20");
+      svgOverlay.appendChild(rect);
+    }
+
+    function captureVideo() {
+      const capturedContext = capturedCanvasElement.getContext('2d');
+      capturedCanvasElement.width = canvasElement.width;
+      capturedCanvasElement.height = canvasElement.height;
+      capturedContext.drawImage(videoElement, 0, 0, capturedCanvasElement.width, capturedCanvasElement.height);
+
+      const capturedImage = document.getElementById('capturedImage');
+      capturedImage.src = capturedCanvasElement.toDataURL('image/png');
+      capturedImage.style.display = 'block';
+    }
+
+    async function toggleFacingMode() {
+      facingMode = facingMode === 'user' ? 'environment' : 'user';
+      statusElement.textContent = "Switching camera...";
+      retryCount = 0;
+      await startWebcam();
+    }
+
+    async function stopStream() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      stopFrameRendering();
+      statusElement.textContent = "Camera stopped";
+      updateButtonStates(false);
+    }
+
+    function handleWebcamError(error) {
+      console.error('Error starting webcam:', error);
+      errorElement.textContent = `Error: ${error.message}`;
+      statusElement.textContent = "Error starting camera.";
+      
+      if (retryCount < MAX_RETRIES) {
+        retryCount++;
+        statusElement.textContent = `Retrying... (Attempt ${retryCount}/${MAX_RETRIES})`;
+        facingMode = facingMode === 'user' ? 'environment' : 'user';
+        console.log('Trying alternative facing mode:', facingMode);
+        setTimeout(startWebcam, 2000);
+      } else {
+        statusElement.textContent = "Failed to start camera after multiple attempts.";
+        startCameraButton.disabled = false;
+      }
+    }
+
+    function updateButtonStates(cameraActive) {
+      startCameraButton.disabled = cameraActive;
+      stopCameraButton.disabled = !cameraActive;
+      captureButton.disabled = !cameraActive;
+      toggleFacingModeButton.disabled = !cameraActive;
+    }
+
+    // Event Listeners
+    startCameraButton.addEventListener('click', startWebcam);
+    stopCameraButton.addEventListener('click', stopStream);
+    captureButton.addEventListener('click', captureVideo);
+    toggleFacingModeButton.addEventListener('click', toggleFacingMode);
+    window.addEventListener('beforeunload', stopStream);
+
+    document.getElementById('toggleContour').addEventListener('change', function() {
+      showContour = this.checked;
+    });
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof cv !== 'undefined') {
+        onOpenCvReady();
+      }
+    });
+  </script>
+  <script async src="https://docs.opencv.org/4.5.2/opencv.js" onload="onOpenCvReady();"></script>
+</body>
+</html>
