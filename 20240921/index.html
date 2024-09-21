@@ -308,7 +308,7 @@ input:checked + .slider:before {
     function drawContours(src, largestContour) {
       if (largestContour) {
         const rect = cv.boundingRect(largestContour);
-        cv.rectangle(src, new cv.Point(rect.x, rect.y), new cv.Point(rect.x + rect.width, rect.y + rect.height), [255, 0, 0, 255], 4);
+        cv.rectangle(src, new cv.Point(rect.x, rect.y), new cv.Point(rect.x + rect.width, rect.y + rect.height), [0, 0, 255, 255], 8);
       }
     }
 
